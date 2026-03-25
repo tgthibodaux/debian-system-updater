@@ -2,7 +2,7 @@
 
 # Debian System Update Script
 # This script performs a comprehensive system update
-# Last updated: August 1, 2025
+# Last updated: March 25, 2026
 
 # Colors for output
 RED='\033[0;31m'
@@ -173,8 +173,21 @@ else
     print_status "Docker not installed, skipping Docker updates."
 fi
 
-# Step 10: Update system security
-print_header "Step 10: Security Updates"
+# Step 10: Update Claude Code
+print_header "Step 10: Updating Claude Code"
+if command -v claude >/dev/null 2>&1; then
+    print_status "Claude Code found, checking for updates..."
+    if claude update; then
+        print_status "Claude Code updated successfully!"
+    else
+        print_warning "Claude Code update encountered some issues."
+    fi
+else
+    print_status "Claude Code not installed, skipping."
+fi
+
+# Step 11: Update system security
+print_header "Step 11: Security Updates"
 print_status "Checking for unattended-upgrades configuration..."
 if dpkg -l | grep -q unattended-upgrades; then
     print_status "Unattended upgrades is installed and will handle automatic security updates."
@@ -195,8 +208,8 @@ else
     print_status "No pending security updates found."
 fi
 
-# Step 11: System cleanup
-print_header "Step 11: Additional System Cleanup"
+# Step 12: System cleanup
+print_header "Step 12: Additional System Cleanup"
 print_status "Cleaning up system logs older than 7 days..."
 if command -v journalctl >/dev/null 2>&1; then
     $SUDO_CMD journalctl --vacuum-time=7d >/dev/null 2>&1
@@ -244,6 +257,12 @@ if command -v docker >/dev/null 2>&1; then
     echo -e "  ${GREEN}✓${NC} Updated Docker"
 else
     echo -e "  ${YELLOW}⚠${NC} Docker not installed"
+fi
+
+if command -v claude >/dev/null 2>&1; then
+    echo -e "  ${GREEN}✓${NC} Updated Claude Code"
+else
+    echo -e "  ${YELLOW}⚠${NC} Claude Code not installed"
 fi
 
 echo -e "  ${GREEN}✓${NC} Performed security checks"

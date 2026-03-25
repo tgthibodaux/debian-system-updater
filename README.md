@@ -11,6 +11,7 @@ Comprehensive system update scripts for Debian-based systems including Ubuntu, P
 - **Snap Packages**: Automatic snap package updates
 - **Flatpak Support**: Updates Flatpak applications and runtimes
 - **Docker Integration**: Updates Docker CE and cleans unused resources
+- **Claude Code**: Updates Claude Code CLI (`claude update`) if installed
 - **Security Updates**: Dedicated security update checking and installation
 - **Firmware Updates**: BIOS/UEFI and hardware driver updates via fwupd
 - **System Cleanup**: Log rotation, cache cleaning, database updates
@@ -83,11 +84,12 @@ sudo ./update-system.sh
 7. **Updates Flatpak packages** (if installed)
 8. **Updates Docker** (if installed)
 9. **Checks firmware updates** (if fwupd available)
-10. **Updates Oh My Zsh** (Zsh version only)
+10. **Updates Claude Code** (if installed)
+11. **Updates Oh My Zsh** (Zsh version only)
 
 ### System Maintenance
-11. **Security update check** and installation
-12. **System log cleanup** (removes logs older than 7 days)
+12. **Security update check** and installation
+13. **System log cleanup** (removes logs older than 7 days)
 13. **Cache cleanup** and database updates
 14. **Reboot requirement detection**
 15. **System information summary**
@@ -140,6 +142,7 @@ Update Process Complete!
   ✓ Cleaned package cache
   ✓ Updated Snap packages
   ✓ Updated Docker
+  ✓ Updated Claude Code
   ✓ Performed security checks
   ✓ System cleanup completed
 
@@ -175,8 +178,9 @@ These scripts perform system-level operations. While designed to be safe:
 
 ## 📈 Version History
 
+- **v1.1** (March 2026) - Added Claude Code update step (`claude update`)
 - **v1.0** (August 2025) - Initial release with comprehensive update automation
 
 ---
 
-*Last updated: August 1, 2025*
+*Last updated: March 25, 2026*
