@@ -2,7 +2,15 @@
 
 # Debian System Update Script
 # This script performs a comprehensive system update
-# Last updated: March 25, 2026
+# Last updated: May 30, 2026
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+LOG_FILE="/var/log/system-update.log"
+if touch "$LOG_FILE" 2>/dev/null; then
+    exec > >(tee -a "$LOG_FILE") 2>&1
+else
+    LOG_FILE=""
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -13,27 +21,16 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Function to print colored headers
 print_header() {
     echo -e "\n${BLUE}======================================${NC}"
     echo -e "${CYAN}$1${NC}"
     echo -e "${BLUE}======================================${NC}\n"
 }
+print_status()  { echo -e "${GREEN}[INFO]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Function to print status messages
-print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Check if running as root and set command prefix
+# ── Privilege check ───────────────────────────────────────────────────────────
 SUDO_CMD=""
 check_privileges() {
     if [[ $EUID -eq 0 ]]; then
@@ -41,7 +38,7 @@ check_privileges() {
         SUDO_CMD=""
     else
         if ! command -v sudo >/dev/null 2>&1; then
-            print_error "Not running as root and sudo is not available. Please run as root or install sudo."
+            print_error "Not running as root and sudo is not available."
             exit 1
         fi
         if ! sudo -n true 2>/dev/null; then
@@ -52,25 +49,40 @@ check_privileges() {
     fi
 }
 
-# Main script starts here
+# ── Main ──────────────────────────────────────────────────────────────────────
 print_header "Starting System Update Process"
 print_status "Script started at: $(date)"
+[[ -n "$LOG_FILE" ]] && print_status "Logging to: $LOG_FILE" \
+    || print_warning "Could not write to /var/log — logging to stdout only."
 
-# Check privileges
 check_privileges
 
-# Step 1: Update package lists
+# ── Step 1: apt update (with mirror-sync retry) ───────────────────────────────
 print_header "Step 1: Updating Package Lists (apt update)"
 print_status "Refreshing package database from repositories..."
 print_status "This downloads the latest package information but doesn't install anything yet."
-if $SUDO_CMD apt update; then
+
+APT_UPDATE_SUCCESS=false
+for i in 1 2 3; do
+    if $SUDO_CMD apt update 2>&1; then
+        APT_UPDATE_SUCCESS=true
+        break
+    else
+        if [[ $i -lt 3 ]]; then
+            print_warning "apt update attempt $i failed (possible mirror sync in progress). Retrying in 60s..."
+            sleep 60
+        fi
+    fi
+done
+
+if $APT_UPDATE_SUCCESS; then
     print_status "Package lists updated successfully!"
 else
-    print_error "Failed to update package lists. Check your internet connection."
-    exit 1
+    print_error "Failed to update package lists after 3 attempts. Check your internet connection."
+    print_warning "Continuing with cached package lists — some updates may be skipped."
 fi
 
-# Step 2: Upgrade packages
+# ── Step 2: apt upgrade ───────────────────────────────────────────────────────
 print_header "Step 2: Upgrading Installed Packages (apt upgrade)"
 print_status "Upgrading all installed packages to their latest versions..."
 print_status "This installs newer versions of packages you already have installed."
@@ -80,7 +92,7 @@ else
     print_warning "Some packages may not have upgraded successfully."
 fi
 
-# Step 3: Full upgrade
+# ── Step 3: apt full-upgrade ──────────────────────────────────────────────────
 print_header "Step 3: Performing Full Upgrade (apt full-upgrade)"
 print_status "Performing full upgrade with intelligent dependency handling..."
 print_status "This can install new packages or remove packages if needed for upgrades."
@@ -90,7 +102,7 @@ else
     print_warning "Full upgrade encountered some issues."
 fi
 
-# Step 4: Remove unnecessary packages
+# ── Step 4: apt autoremove ────────────────────────────────────────────────────
 print_header "Step 4: Removing Unused Packages (apt autoremove)"
 print_status "Removing packages that were automatically installed and are no longer needed..."
 print_status "This frees up disk space by removing orphaned dependencies."
@@ -100,7 +112,7 @@ else
     print_warning "Autoremove encountered some issues."
 fi
 
-# Step 5: Clean package cache
+# ── Step 5: apt autoclean ─────────────────────────────────────────────────────
 print_header "Step 5: Cleaning Package Cache (apt autoclean)"
 print_status "Cleaning the local package cache..."
 print_status "This removes cached package files that can no longer be downloaded."
@@ -110,7 +122,7 @@ else
     print_warning "Autoclean encountered some issues."
 fi
 
-# Step 6: Update Snap packages
+# ── Step 6: Snap ──────────────────────────────────────────────────────────────
 print_header "Step 6: Updating Snap Packages"
 if command -v snap >/dev/null 2>&1; then
     print_status "Updating snap packages..."
@@ -124,7 +136,7 @@ else
     print_status "Snap not installed, skipping snap updates."
 fi
 
-# Step 7: Update Flatpak packages
+# ── Step 7: Flatpak ───────────────────────────────────────────────────────────
 print_header "Step 7: Updating Flatpak Packages"
 if command -v flatpak >/dev/null 2>&1; then
     print_status "Updating flatpak packages and runtimes..."
@@ -138,7 +150,7 @@ else
     print_status "Flatpak not installed, skipping flatpak updates."
 fi
 
-# Step 8: Update firmware
+# ── Step 8: Firmware ──────────────────────────────────────────────────────────
 print_header "Step 8: Checking for Firmware Updates"
 if command -v fwupdmgr >/dev/null 2>&1; then
     print_status "Checking for firmware updates..."
@@ -150,30 +162,25 @@ if command -v fwupdmgr >/dev/null 2>&1; then
     fi
 else
     print_status "fwupdmgr not available, skipping firmware updates."
-    print_status "To install firmware update support: sudo apt install fwupd"
+    print_status "To install firmware update support: $SUDO_CMD apt install fwupd"
 fi
 
-# Step 9: Update Docker (if installed)
+# ── Step 9: Docker ────────────────────────────────────────────────────────────
 print_header "Step 9: Updating Docker"
 if command -v docker >/dev/null 2>&1; then
     print_status "Docker found, updating Docker images..."
-    
-    # Update Docker CE if installed via repository
     if $SUDO_CMD apt list --installed 2>/dev/null | grep -q docker-ce; then
         print_status "Updating Docker CE package..."
         DEBIAN_FRONTEND=noninteractive $SUDO_CMD apt upgrade docker-ce docker-ce-cli containerd.io -y
     fi
-    
-    # Prune unused Docker resources
     print_status "Cleaning up unused Docker resources..."
     docker system prune -f >/dev/null 2>&1 || print_warning "Docker cleanup requires user permissions"
-    
     print_status "Docker updates completed!"
 else
     print_status "Docker not installed, skipping Docker updates."
 fi
 
-# Step 10: Update Claude Code
+# ── Step 10: Claude Code ──────────────────────────────────────────────────────
 print_header "Step 10: Updating Claude Code"
 if command -v claude >/dev/null 2>&1; then
     print_status "Claude Code found, checking for updates..."
@@ -186,19 +193,17 @@ else
     print_status "Claude Code not installed, skipping."
 fi
 
-# Step 11: Update system security
+# ── Step 11: Security updates ─────────────────────────────────────────────────
 print_header "Step 11: Security Updates"
 print_status "Checking for unattended-upgrades configuration..."
 if dpkg -l | grep -q unattended-upgrades; then
     print_status "Unattended upgrades is installed and will handle automatic security updates."
 else
     print_warning "Consider installing unattended-upgrades for automatic security updates:"
-    print_status "  sudo apt install unattended-upgrades"
+    print_status "  $SUDO_CMD apt install unattended-upgrades"
 fi
 
-# Check for available security updates
 security_updates=$(apt list --upgradable 2>/dev/null | grep -c security 2>/dev/null || echo "0")
-# Clean up any extra whitespace or newlines
 security_updates=$(echo "$security_updates" | tr -d '\n\r' | grep -o '[0-9]*' | head -1)
 if [[ "${security_updates:-0}" -gt 0 ]]; then
     print_warning "There are $security_updates security updates available."
@@ -208,7 +213,7 @@ else
     print_status "No pending security updates found."
 fi
 
-# Step 12: System cleanup
+# ── Step 12: System cleanup ───────────────────────────────────────────────────
 print_header "Step 12: Additional System Cleanup"
 print_status "Cleaning up system logs older than 7 days..."
 if command -v journalctl >/dev/null 2>&1; then
@@ -225,7 +230,7 @@ if command -v updatedb >/dev/null 2>&1; then
     print_status "Database update running in background."
 fi
 
-# Final summary
+# ── Summary ───────────────────────────────────────────────────────────────────
 print_header "Update Process Complete!"
 print_status "All update tasks completed at: $(date)"
 print_status "Summary of completed tasks:"
@@ -235,45 +240,34 @@ echo -e "  ${GREEN}✓${NC} Performed full upgrade"
 echo -e "  ${GREEN}✓${NC} Removed unused packages"
 echo -e "  ${GREEN}✓${NC} Cleaned package cache"
 
-if command -v snap >/dev/null 2>&1; then
-    echo -e "  ${GREEN}✓${NC} Updated Snap packages"
-else
-    echo -e "  ${YELLOW}⚠${NC} Snap not installed"
-fi
+command -v snap >/dev/null 2>&1 \
+    && echo -e "  ${GREEN}✓${NC} Updated Snap packages" \
+    || echo -e "  ${YELLOW}⚠${NC} Snap not installed"
 
-if command -v flatpak >/dev/null 2>&1; then
-    echo -e "  ${GREEN}✓${NC} Updated Flatpak packages"
-else
-    echo -e "  ${YELLOW}⚠${NC} Flatpak not installed"
-fi
+command -v flatpak >/dev/null 2>&1 \
+    && echo -e "  ${GREEN}✓${NC} Updated Flatpak packages" \
+    || echo -e "  ${YELLOW}⚠${NC} Flatpak not installed"
 
-if command -v fwupdmgr >/dev/null 2>&1; then
-    echo -e "  ${GREEN}✓${NC} Checked firmware updates"
-else
-    echo -e "  ${YELLOW}⚠${NC} Firmware updates not available"
-fi
+command -v fwupdmgr >/dev/null 2>&1 \
+    && echo -e "  ${GREEN}✓${NC} Checked firmware updates" \
+    || echo -e "  ${YELLOW}⚠${NC} Firmware updates not available"
 
-if command -v docker >/dev/null 2>&1; then
-    echo -e "  ${GREEN}✓${NC} Updated Docker"
-else
-    echo -e "  ${YELLOW}⚠${NC} Docker not installed"
-fi
+command -v docker >/dev/null 2>&1 \
+    && echo -e "  ${GREEN}✓${NC} Updated Docker" \
+    || echo -e "  ${YELLOW}⚠${NC} Docker not installed"
 
-if command -v claude >/dev/null 2>&1; then
-    echo -e "  ${GREEN}✓${NC} Updated Claude Code"
-else
-    echo -e "  ${YELLOW}⚠${NC} Claude Code not installed"
-fi
+command -v claude >/dev/null 2>&1 \
+    && echo -e "  ${GREEN}✓${NC} Updated Claude Code" \
+    || echo -e "  ${YELLOW}⚠${NC} Claude Code not installed"
 
 echo -e "  ${GREEN}✓${NC} Performed security checks"
 echo -e "  ${GREEN}✓${NC} System cleanup completed"
+[[ -n "$LOG_FILE" ]] && echo -e "  ${GREEN}✓${NC} Run logged to $LOG_FILE"
 
-# Check if reboot is required
+# ── Reboot check ──────────────────────────────────────────────────────────────
 if [[ -f /var/run/reboot-required ]]; then
     print_warning "REBOOT REQUIRED: System updates require a reboot to take effect."
-    echo -e "${YELLOW}Run 'sudo reboot' when convenient.${NC}"
-    
-    # Show what packages require reboot
+    echo -e "${YELLOW}Run '$SUDO_CMD reboot' when convenient.${NC}"
     if [[ -f /var/run/reboot-required.pkgs ]]; then
         print_status "Packages that triggered reboot requirement:"
         cat /var/run/reboot-required.pkgs | sed 's/^/  - /'
@@ -284,15 +278,14 @@ fi
 
 print_status "Your system is now up to date!"
 
-# Show system information
+# ── System info ───────────────────────────────────────────────────────────────
 print_header "System Information"
-print_status "Ubuntu version: $(lsb_release -d | cut -f2)"
+print_status "System version: $(lsb_release -d 2>/dev/null | cut -f2 || echo "Unknown")"
 print_status "Kernel version: $(uname -r)"
-print_status "System uptime: $(uptime -p)"
+print_status "System uptime: $(uptime -p 2>/dev/null || uptime)"
 
-# Show disk usage for important partitions
 print_status "Disk usage:"
-df -h / /var /tmp 2>/dev/null | grep -E '^/dev|Filesystem' | while read line; do
+df -h / /var /tmp 2>/dev/null | grep -E '^/dev|Filesystem' | sort -u | while read line; do
     echo "  $line"
 done
 
