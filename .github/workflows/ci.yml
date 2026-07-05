@@ -1,0 +1,29 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: ShellCheck (bash script)
+        # -S error for now: the script has 4 style/info/warning findings that
+        # fail default severity. Tighten to default once those are fixed.
+        # update-system-zsh.sh is zsh, which shellcheck does not support
+        # (SC1071) — syntax-checked below instead.
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck -S error update-system.sh
+      - name: Zsh syntax check (zsh script)
+        run: |
+          sudo apt-get install -y zsh
+          zsh -n update-system-zsh.sh
