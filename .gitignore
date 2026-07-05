@@ -1,0 +1,12 @@
+# Run logs (scripts also write to /var/log/system-update.log, outside this repo,
+# but ignore any that end up written locally during testing)
+*.log
+
+# Temp/backup files scripts or editors may drop here
+*.tmp
+*.bak
+*~
+*.swp
+
+# OS cruft
+.DS_Store
